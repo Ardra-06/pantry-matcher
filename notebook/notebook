@@ -1,0 +1,14 @@
+import sys, os
+sys.path.insert(0, "backend")
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path="api.env")
+api_key = os.getenv("SPOONACULAR_API_KEY")
+
+from core.ingredients import load_ingredient_mapping, get_ranked_recipes
+
+mapping = load_ingredient_mapping()
+ranked = get_ranked_recipes(["curd", "capsicum", "atta", "onion"], api_key, mapping)
+
+for r in ranked:
+    print(f"{r['title']} — coverage: {r['coverage_score']}, missing: {r['missed']}")
