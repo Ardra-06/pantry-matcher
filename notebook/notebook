@@ -1,14 +1,27 @@
 import sys, os
 sys.path.insert(0, "backend")
+sys.stdout.reconfigure(encoding='utf-8')
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path="api.env")
 api_key = os.getenv("SPOONACULAR_API_KEY")
 
-from core.ingredients import load_ingredient_mapping, get_ranked_recipes
+from core.ingredients import load_ingredient_mapping, semantic_recipe_score, get_ranked_recipes_final
+
+from sentence_transformers import SentenceTransformer
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 mapping = load_ingredient_mapping()
-ranked = get_ranked_recipes(["curd", "capsicum", "atta", "onion"], api_key, mapping)
+user_ingredients = ["curd", "capsicum", "atta", "onion"]
 
-for r in ranked:
-    print(f"{r['title']} — coverage: {r['coverage_score']}, missing: {r['missed']}")
+# sanity check: mismatched cuisine should score lower than real matches
+fake_recipe_used = []
+fake_recipe_missed = ["soy sauce", "rice vinegar", "sesame oil", "miso paste", "seaweed"]
+mismatch_score = semantic_recipe_score(user_ingredients, fake_recipe_used, fake_recipe_missed, model)
+print(f"Mismatched cuisine test — semantic score: {mismatch_score}")
+
+# final ranked recipes: coverage primary, semantic as tie-breaker
+final_ranked = get_ranked_recipes_final(user_ingredients, api_key, mapping, model)
+
+for r in final_ranked:
+    print(f"{r['title']} — coverage: {r['coverage_score']}, semantic: {r['semantic_score']}")
