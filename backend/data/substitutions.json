@@ -1,0 +1,21 @@
+{
+  "garlic": ["garlic powder", "shallots"],
+  "onion": ["shallots", "leeks"],
+  "yogurt": ["sour cream", "buttermilk"],
+  "butter": ["margarine", "oil"],
+  "egg": ["flax egg", "applesauce"],
+  "spinach": ["kale", "swiss chard"],
+  "tomato": ["tomato paste", "sun-dried tomatoes"],
+  "lemon juice": ["lime juice", "vinegar"],
+  "cumin": ["coriander", "caraway seeds"],
+  "bell pepper": ["poblano pepper", "jalapeno"],
+  "whole wheat flour": ["all-purpose flour", "oat flour"],
+  "cilantro": ["parsley", "basil"],
+  "ginger": ["ground ginger", "allspice"],
+  "chicken": ["tofu", "paneer"],
+  "milk": ["almond milk", "soy milk"],
+  "cream": ["evaporated milk", "coconut cream"],
+  "mozzarella": ["cheddar", "provolone"],
+  "breadcrumbs": ["crushed crackers", "panko"],
+  "mayonnaise": ["greek yogurt", "sour cream"]
+}

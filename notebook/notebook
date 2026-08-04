@@ -25,3 +25,12 @@ final_ranked = get_ranked_recipes_final(user_ingredients, api_key, mapping, mode
 
 for r in final_ranked:
     print(f"{r['title']} — coverage: {r['coverage_score']}, semantic: {r['semantic_score']}")
+
+from core.ingredients import load_substitutions, get_substitutions
+
+substitutions_map = load_substitutions()
+
+for r in final_ranked:
+    subs = get_substitutions(r["missed"], substitutions_map)
+    if subs:
+        print(f"{r['title']}: {subs}")

@@ -88,3 +88,14 @@ def get_ranked_recipes_final(user_ingredients, api_key, mapping, model, number=1
         reverse=True
     )
     return ranked
+
+def load_substitutions(path="backend/data/substitutions.json"):
+    with open(path, "r") as f:
+        return json.load(f)
+
+def get_substitutions(missing_ingredients, substitutions_map):
+    suggestions = {}
+    for ing in missing_ingredients:
+        if ing in substitutions_map:
+            suggestions[ing] = substitutions_map[ing]
+    return suggestions
