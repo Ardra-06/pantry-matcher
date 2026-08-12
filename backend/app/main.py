@@ -25,3 +25,11 @@ def get_recipes(request: IngredientRequest):
         r["substitutions"] = get_substitutions(r["missed"], substitutions_map)
     
     return {"recipes": ranked}
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

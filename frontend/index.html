@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pantry Matcher</title>
+</head>
+<body>
+    <h1>What can I cook?</h1>
+    
+    <input type="text" id="ingredientInput" placeholder="e.g. curd, capsicum, atta, onion">
+    <button id="findButton">Find Recipes</button>
+    
+    <div id="results"></div>
+    <script>
+        document.getElementById("findButton").addEventListener("click", async () => {
+            const inputText = document.getElementById("ingredientInput").value;
+            const ingredients = inputText.split(",").map(item => item.trim());
+
+            const response = await fetch("http://127.0.0.1:8000/recipes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ingredients: ingredients })
+            });
+
+            const data = await response.json();
+            displayResults(data.recipes);
+        });
+
+        function displayResults(recipes) {
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "";
+
+            recipes.forEach(recipe => {
+                const recipeBlock = document.createElement("div");
+                recipeBlock.innerHTML = `
+                    <h3>${recipe.title}</h3>
+                    <p>Coverage: ${recipe.coverage_score} | Semantic: ${recipe.semantic_score}</p>
+                    <p>Missing: ${recipe.missed.join(", ")}</p>
+                `;
+                resultsDiv.appendChild(recipeBlock);
+            });
+        }
+    </script>
+</body>
+</html>
