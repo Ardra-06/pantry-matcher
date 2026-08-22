@@ -10,6 +10,7 @@
     <button id="findButton">Find Recipes</button>
     
     <div id="results"></div>
+
     <script>
         document.getElementById("findButton").addEventListener("click", async () => {
             const inputText = document.getElementById("ingredientInput").value;
@@ -35,9 +36,24 @@
                     <h3>${recipe.title}</h3>
                     <p>Coverage: ${recipe.coverage_score} | Semantic: ${recipe.semantic_score}</p>
                     <p>Missing: ${recipe.missed.join(", ")}</p>
+                    <button onclick="showRecipeDetails(${recipe.id})">View Recipe</button>
+                    <div id="details-${recipe.id}"></div>
                 `;
                 resultsDiv.appendChild(recipeBlock);
             });
+        }
+
+        async function showRecipeDetails(recipeId) {
+            const detailsDiv = document.getElementById(`details-${recipeId}`);
+            detailsDiv.innerHTML = "Loading...";
+
+            const response = await fetch(`http://127.0.0.1:8000/recipes/${recipeId}`);
+            const data = await response.json();
+
+            detailsDiv.innerHTML = `
+                <p><strong>Ready in:</strong> ${data.readyInMinutes} minutes | <strong>Servings:</strong> ${data.servings}</p>
+                <p style="white-space: pre-line">${data.instructions}</p>
+            `;
         }
     </script>
 </body>

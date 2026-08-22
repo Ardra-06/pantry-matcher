@@ -33,3 +33,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from backend.core.ingredients import fetch_recipe_details
+
+@app.get("/recipes/{recipe_id}")
+def get_recipe_details(recipe_id: int):
+    details = fetch_recipe_details(recipe_id, api_key)
+    return {
+        "title": details.get("title"),
+        "instructions": details.get("instructions"),
+        "readyInMinutes": details.get("readyInMinutes"),
+        "servings": details.get("servings"),
+        "sourceUrl": details.get("sourceUrl")
+    }
+

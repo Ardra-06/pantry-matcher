@@ -99,3 +99,9 @@ def get_substitutions(missing_ingredients, substitutions_map):
         if ing in substitutions_map:
             suggestions[ing] = substitutions_map[ing]
     return suggestions
+
+def fetch_recipe_details(recipe_id, api_key):
+    url = f"https://api.spoonacular.com/recipes/{recipe_id}/information"
+    params = {"apiKey": api_key}
+    response = requests.get(url, params=params)
+    return response.json()
