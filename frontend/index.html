@@ -1,60 +1,384 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Pantry Matcher</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pantry Matcher | Find Recipes</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f7f2;
+            color: #26352a;
+        }
+
+        header {
+            background: #245c40;
+            color: white;
+            padding: 28px 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0 0 8px;
+        }
+
+        header p {
+            margin: 0;
+            color: #e0eee3;
+        }
+
+        main {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 18px;
+        }
+
+        .search-box {
+            background: white;
+            padding: 22px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px #0000000d;
+        }
+
+        .search-box label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        input {
+            flex: 1;
+            min-width: 0;
+            padding: 13px;
+            border: 1px solid #ccd5cc;
+            border-radius: 7px;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 7px;
+            background: #28764b;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d5a38;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        #status {
+            margin: 20px 0;
+            color: #555;
+        }
+
+        #results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        .recipe-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 3px 12px #0000000d;
+        }
+
+        .recipe-image {
+            width: 100%;
+            height: 190px;
+            object-fit: cover;
+            background: #e7ece6;
+            display: block;
+        }
+
+        .recipe-content {
+            padding: 17px;
+        }
+
+        .recipe-content h2 {
+            font-size: 19px;
+            margin: 0 0 10px;
+        }
+
+        .meta {
+            color: #647067;
+            font-size: 14px;
+            margin: 7px 0;
+        }
+
+        .details {
+            border-top: 1px solid #e5e9e4;
+            margin-top: 14px;
+            padding-top: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        .details p {
+            line-height: 1.6;
+        }
+
+        .details button {
+            margin-top: 8px;
+        }
+
+        .instructions {
+            white-space: pre-line;
+            line-height: 1.6;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .error {
+            color: #a52b2b !important;
+        }
+
+        @media (max-width: 520px) {
+            .search-row {
+                flex-direction: column;
+            }
+
+            .search-row button {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
+
 <body>
-    <h1>What can I cook?</h1>
-    
-    <input type="text" id="ingredientInput" placeholder="e.g. curd, capsicum, atta, onion">
-    <button id="findButton">Find Recipes</button>
-    
-    <div id="results"></div>
+    <header>
+        <h1>Pantry Matcher</h1>
+        <p>Find recipes using ingredients you already have.</p>
+    </header>
+
+    <main>
+        <section class="search-box">
+            <label for="ingredientInput">Enter your ingredients</label>
+
+            <div class="search-row">
+                <input
+                    type="text"
+                    id="ingredientInput"
+                    placeholder="e.g. curd, capsicum, atta, onion"
+                >
+                <button id="findButton">Find Recipes</button>
+            </div>
+        </section>
+
+        <p id="status" role="status" aria-live="polite">
+            Enter ingredients separated by commas to get started.
+        </p>
+
+        <section id="results" aria-label="Recipe results"></section>
+    </main>
 
     <script>
-        document.getElementById("findButton").addEventListener("click", async () => {
-            const inputText = document.getElementById("ingredientInput").value;
-            const ingredients = inputText.split(",").map(item => item.trim());
+    const API_BASE = "http://127.0.0.1:8000";
 
-            const response = await fetch("http://127.0.0.1:8000/recipes", {
+    const ingredientInput = document.getElementById("ingredientInput");
+    const findButton = document.getElementById("findButton");
+    const resultsDiv = document.getElementById("results");
+    const statusDiv = document.getElementById("status");
+
+    findButton.addEventListener("click", findRecipes);
+    ingredientInput.addEventListener("keydown", event => {
+        if (event.key === "Enter") findRecipes();
+    });
+
+    function setStatus(message, isError = false) {
+        statusDiv.textContent = message;
+        statusDiv.classList.toggle("error", isError);
+    }
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            const message = await response.text();
+            throw new Error(`API error ${response.status}: ${message || response.statusText}`);
+        }
+        return response.json();
+    }
+
+    function el(tag, className, text) {
+        const element = document.createElement(tag);
+        if (className) element.className = className;
+        if (text !== undefined) element.textContent = text;
+        return element;
+    }
+
+    function formatSubstitute(value) {
+        if (Array.isArray(value)) return value.join(", ");
+        if (value && typeof value === "object") return JSON.stringify(value);
+        return String(value);
+    }
+
+    async function findRecipes() {
+        const ingredients = ingredientInput.value
+            .split(",")
+            .map(item => item.trim())
+            .filter(Boolean);
+
+        if (!ingredients.length) {
+            setStatus("Please enter at least one ingredient.", true);
+            return;
+        }
+
+        findButton.disabled = true;
+        resultsDiv.replaceChildren();
+        setStatus("Searching for recipes...");
+
+        try {
+            const data = await apiRequest(`${API_BASE}/recipes`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ingredients: ingredients })
+                body: JSON.stringify({ ingredients })
             });
 
-            const data = await response.json();
-            displayResults(data.recipes);
-        });
+            const recipes = data.recipes ?? [];
 
-        function displayResults(recipes) {
-            const resultsDiv = document.getElementById("results");
-            resultsDiv.innerHTML = "";
+            if (recipes.length === 0) {
+                setStatus("No recipes found. Try different ingredients.");
+                return;
+            }
 
             recipes.forEach(recipe => {
-                const recipeBlock = document.createElement("div");
-                recipeBlock.innerHTML = `
-                    <h3>${recipe.title}</h3>
-                    <p>Coverage: ${recipe.coverage_score} | Semantic: ${recipe.semantic_score}</p>
-                    <p>Missing: ${recipe.missed.join(", ")}</p>
-                    <button onclick="showRecipeDetails(${recipe.id})">View Recipe</button>
-                    <div id="details-${recipe.id}"></div>
-                `;
-                resultsDiv.appendChild(recipeBlock);
+                resultsDiv.appendChild(createRecipeCard(recipe, ingredients.length));
             });
+
+            setStatus(`Found ${recipes.length} recipe(s).`);
+        } catch (error) {
+            console.error("Recipe search failed:", error);
+            setStatus(
+                `Could not load recipes. ${error.message}. Check that the backend is running.`,
+                true
+            );
+        } finally {
+            findButton.disabled = false;
+        }
+    }
+
+    function createRecipeCard(recipe, totalUserIngredients) {
+        const card = el("article", "recipe-card");
+
+        if (recipe.image) {
+            const image = el("img", "recipe-image");
+            image.src = recipe.image;
+            image.alt = recipe.title;
+            image.loading = "lazy";
+            image.addEventListener("error", () => image.remove());
+            card.appendChild(image);
         }
 
-        async function showRecipeDetails(recipeId) {
-            const detailsDiv = document.getElementById(`details-${recipeId}`);
-            detailsDiv.innerHTML = "Loading...";
+        const content = el("div", "recipe-content");
+        content.appendChild(el("h2", "", recipe.title));
 
-            const response = await fetch(`http://127.0.0.1:8000/recipes/${recipeId}`);
-            const data = await response.json();
+        const matchedCount = Math.min(recipe.matched_user ?? 0, totalUserIngredients);
+        const percent = Math.round((recipe.coverage_score ?? 0) * 100);
+        content.appendChild(
+            el("span", "tag", `Uses ${matchedCount} of your ${totalUserIngredients} ingredients`)
+        );
+        content.appendChild(el("p", "meta", `${percent}% of this recipe's ingredients covered`));
 
-            detailsDiv.innerHTML = `
-                <p><strong>Ready in:</strong> ${data.readyInMinutes} minutes | <strong>Servings:</strong> ${data.servings}</p>
-                <p style="white-space: pre-line">${data.instructions}</p>
-            `;
+        const used = recipe.used ?? [];
+        const missed = recipe.missed ?? [];
+
+        if (used.length) {
+            content.appendChild(el("p", "meta", `You have: ${used.join(", ")}`));
         }
-    </script>
+        if (missed.length) {
+            content.appendChild(el("p", "meta", `You need: ${missed.join(", ")}`));
+        }
+
+        const subs = Object.entries(recipe.substitutions ?? {});
+        if (subs.length) {
+            content.appendChild(el("p", "meta", "Possible substitutes:"));
+            const list = el("ul", "subs");
+            subs.forEach(([missing, substitute]) => {
+                list.appendChild(el("li", "", `${missing}: ${formatSubstitute(substitute)}`));
+            });
+            content.appendChild(list);
+        }
+
+        const details = el("div", "details");
+        const button = el("button", "", "View Recipe");
+        button.addEventListener("click", () => loadRecipeDetails(recipe.id, details, button));
+        details.appendChild(button);
+
+        content.appendChild(details);
+        card.appendChild(content);
+        return card;
+    }
+
+    async function loadRecipeDetails(id, detailsDiv, button) {
+        button.disabled = true;
+        detailsDiv.replaceChildren(el("p", "meta", "Loading recipe details..."));
+
+        try {
+            const recipe = await apiRequest(`${API_BASE}/recipes/${encodeURIComponent(id)}`);
+            renderRecipeDetails(recipe, detailsDiv);
+        } catch (error) {
+            console.error("Recipe details failed:", error);
+            detailsDiv.replaceChildren(
+                el("p", "error", `Could not load details: ${error.message}`)
+            );
+        }
+    }
+
+    function renderRecipeDetails(recipe, detailsDiv) {
+        detailsDiv.replaceChildren();
+
+        const ingredients = recipe.ingredients ?? [];
+        if (ingredients.length) {
+            detailsDiv.appendChild(el("h3", "", "Ingredients"));
+            const list = document.createElement("ul");
+            ingredients.forEach(item => list.appendChild(el("li", "", item)));
+            detailsDiv.appendChild(list);
+        }
+
+        if (recipe.instructions) {
+            detailsDiv.appendChild(el("h3", "", "Instructions"));
+            detailsDiv.appendChild(el("p", "instructions", recipe.instructions));
+        }
+
+        if (recipe.sourceUrl) {
+            try {
+                const url = new URL(recipe.sourceUrl);
+                if (url.protocol === "https:" || url.protocol === "http:") {
+                    const link = el("a", "", "Original recipe");
+                    link.href = url.href;
+                    link.target = "_blank";
+                    link.rel = "noopener noreferrer";
+                    detailsDiv.appendChild(link);
+                }
+            } catch {
+                // ignore invalid URLs
+            }
+        }
+
+        if (!ingredients.length && !recipe.instructions && !recipe.sourceUrl) {
+            detailsDiv.appendChild(el("p", "meta", "No details were returned."));
+        }
+    }
+</script>
 </body>
 </html>

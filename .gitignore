@@ -1,5 +1,5 @@
-api.env
-*.env
-dev_cache.json
-check_indian.py
-__pycache__/
+   api.env
+   *.env
+   dev_cache.json
+   check_indian.py
+   __pycache__/

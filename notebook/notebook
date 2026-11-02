@@ -1,36 +1,82 @@
-import sys, os
-sys.path.insert(0, "backend")
-sys.stdout.reconfigure(encoding='utf-8')
+import os
+import sys
+import traceback
+from pathlib import Path
 
 from dotenv import load_dotenv
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+# --- Setup ---
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 load_dotenv(dotenv_path="api.env")
-api_key = os.getenv("SPOONACULAR_API_KEY")
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+print("Gemini key loaded:", bool(gemini_api_key))
 
-from core.ingredients import load_ingredient_mapping, semantic_recipe_score, get_ranked_recipes_final
+from backend.core.ingredients import (
+    get_mealdb_summary,
+    get_ranked_mealdb_recipes,
+    get_cuisine_recipes,
+    parse_user_intent,
+    handle_chat_message,
+)
 
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('all-MiniLM-L6-v2')
+user_ingredients = ["chicken", "carrots", "potatoes"]
 
-mapping = load_ingredient_mapping()
-user_ingredients = ["curd", "capsicum", "atta", "onion"]
 
-# sanity check: mismatched cuisine should score lower than real matches
-fake_recipe_used = []
-fake_recipe_missed = ["soy sauce", "rice vinegar", "sesame oil", "miso paste", "seaweed"]
-mismatch_score = semantic_recipe_score(user_ingredients, fake_recipe_used, fake_recipe_missed, model)
-print(f"Mismatched cuisine test — semantic score: {mismatch_score}")
+def run_section(title, fn):
+    print(f"\n--- {title} ---")
+    try:
+        fn()
+    except Exception:
+        traceback.print_exc(file=sys.stdout)
 
-# final ranked recipes: coverage primary, semantic as tie-breaker
-final_ranked = get_ranked_recipes_final(user_ingredients, api_key, mapping, model)
 
-for r in final_ranked:
-    print(f"{r['title']} — coverage: {r['coverage_score']}, semantic: {r['semantic_score']}")
+# --- 1. Ranked recipes by ingredient coverage ---
+def test_ingredient_search():
+    ranked = get_ranked_mealdb_recipes(user_ingredients)
+    for r in ranked:
+        print(f"{r['title']} - matched: {r.get('matched_user', 'N/A')}/{len(user_ingredients)}, "
+              f"coverage: {r['coverage_score']}, missing: {r['missed']}")
 
-from core.ingredients import load_substitutions, get_substitutions
 
-substitutions_map = load_substitutions()
+# --- 2. Cuisine search ---
+def test_cuisine_search():
+    italian = get_cuisine_recipes("Italian")
+    for r in italian:
+        print(f"{r['title']} - {len(r['ingredients'])} ingredients")
 
-for r in final_ranked:
-    subs = get_substitutions(r["missed"], substitutions_map)
-    if subs:
-        print(f"{r['title']}: {subs}")
+
+# --- 3. Intent parsing only (shows exactly what Gemini returns) ---
+def test_intent_parsing():
+    msg = "I have chicken, carrots, and potatoes, what can I make?"
+    intent_data = parse_user_intent(msg, gemini_api_key)
+    print("Parsed intent:", intent_data)
+
+
+# --- 4. Full chat flow (Gemini intent -> MealDB) ---
+def test_chat_flow():
+    msg = "I have chicken, carrots, and potatoes, what can I make?"
+    result = handle_chat_message(msg, gemini_api_key)
+    print(f"Result Type: {result['type']}")
+
+    if result["results"]:
+        for r in result["results"][:3]:
+            print(f"  {r['title']} - coverage: {r['coverage_score']}")
+    else:
+        print("  No results found or intent parsing fell back safely.")
+
+    # Cuisine query through the same handler
+    result2 = handle_chat_message("Show me some Italian recipes", gemini_api_key)
+    print(f"Result Type: {result2['type']}")
+    for r in result2["results"][:3]:
+        print(f"  {r['title']}")
+
+
+run_section("Ingredient search", test_ingredient_search)
+run_section("Cuisine search", test_cuisine_search)
+run_section("Intent parsing", test_intent_parsing)
+run_section("Chat flow", test_chat_flow)

@@ -1,71 +1,100 @@
 # Pantry Matcher
 
-Find recipes you can actually cook right now, using ingredients you already have.
+Find recipes you can cook right now, using ingredients you already have.
 
 ## The Problem
 
-Most recipe apps assume you'll shop for a specific dish. Pantry Matcher flips that — you tell it what's in your kitchen, and it ranks real recipes by how many ingredients you already have, suggests substitutes for what's missing, and shows full cooking instructions on demand.
+Most recipe apps start from a dish and send you shopping. Pantry Matcher starts from your kitchen: you list what you have, and it ranks recipes by how much of each one you already own, suggests substitutes for what's missing, and shows full instructions on demand.
+
+![Screenshot](docs/screenshot.png)
+
+## Features
+
+- Ingredient search, ranked by how many of your ingredients each recipe uses
+- Indian-to-Western ingredient translation layer (e.g. `curd` → `yogurt`, `capsicum` → `bell pepper`)
+- Substitution suggestions for missing ingredients
+- Chat endpoint: write a plain-English message and Gemini works out whether you listed ingredients or asked for a cuisine
+- Full recipe details (ingredients and instructions) on demand
 
 ## Key Design Decisions
 
-**Indian ingredient translation layer.** The underlying recipe API (Spoonacular) has a Western-centric ingredient database — searching "curd" returned irrelevant matches like tofu. Rather than accept this limitation, I built a translation layer mapping common Indian ingredient names to their closest Western equivalents, with fuzzy string matching (via RapidFuzz) as a fallback to catch typos and spelling variants.
+**Indian ingredient translation layer.** Recipe APIs use a Western-centric ingredient vocabulary. While building on Spoonacular, searching "curd" returned irrelevant matches such as tofu. I added a hand-curated dictionary mapping common Indian ingredient names to Western equivalents, with RapidFuzz fuzzy matching as a fallback for typos and spelling variants.
 
-**Embeddings: tested, and honestly scoped.** I initially planned to use sentence embeddings (`all-MiniLM-L6-v2`) for ingredient-level synonym matching (e.g. recognizing "capsicum" ≈ "bell pepper" automatically). Empirical testing revealed a real limitation: general-purpose embeddings capture topical closeness, not ingredient-identity — "onion" and "garlic" scored *higher* in similarity than "curd" and "yogurt," despite the latter pair being the same food.
+**Embeddings: tested and scoped out of ingredient matching.** I tried sentence embeddings (`all-MiniLM-L6-v2`) for ingredient-level synonym matching. In my tests, general-purpose embeddings captured topical closeness rather than ingredient identity: "onion" and "garlic" scored closer than "curd" and "yogurt", even though the second pair is the same food. So matching uses the dictionary first and fuzzy matching second. A recipe-level embedding tie-breaker exists in the Spoonacular code path but is not used by the current TheMealDB ranking.
 
-Rather than force embeddings into a role they weren't suited for, I redesigned the matching system as a hybrid:
-- **Dictionary lookup** (primary) — hand-curated, precise translations
-- **Fuzzy string matching** (secondary) — catches typos/spelling variants
-- **Embeddings** (repurposed) — used at the whole-recipe level as a coverage-score tie-breaker, where they proved to add real, measurable value
+**Ranking.** Staples (salt, pepper, water, common oils) are excluded from scoring so they don't count as "missing". Matching is word-based, so "chicken stock cube" does not count as chicken. Recipes are ordered by whether they contain your main (first-listed) ingredient, then by how many of your ingredients they match, then by coverage (the share of the recipe's non-staple ingredients you have).
 
-This is a deliberate example of testing a technique, measuring its actual contribution, and scoping it appropriately rather than using it because it sounds impressive.
+**Resilient intent parsing.** `/chat` calls Gemini with retries and exponential backoff on rate-limit, server and network errors. If Gemini stays unavailable, a rule-based parser handles common phrasings ("I have X, Y and Z", cuisine names).
+
+**Data-source quirk handled.** TheMealDB lists the cuisine as `Indian` in its area list but labels the recipes `India`, so filtering by `Indian` returns nothing. An alias map in the code fixes this.
 
 ## Architecture
 
+```
 Frontend (HTML/JS)
-↓
+        ↓
 FastAPI backend
-↓
+        ↓
 Ingredient translation (dictionary + fuzzy matching)
-↓
-Spoonacular API (recipe corpus)
-↓
-Coverage scoring + semantic tie-breaking
-↓
+        ↓
+TheMealDB (recipe source)
+        ↓
+Staple filtering + ranking
+        ↓
 Substitution suggestions
-↓
-Ranked results + on-demand full recipe details
+        ↓
+Ranked results + on-demand recipe details
+```
 
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /recipes` | Body: `{"ingredients": ["chicken", "carrots"]}`. Returns ranked recipes with `used`, `missed`, `coverage_score` and `substitutions`. |
+| `GET /recipes/{recipe_id}` | Ingredients and instructions for one recipe. |
+| `POST /chat` | Body: `{"message": "I have chicken and rice, what can I make?"}`. Gemini-parsed ingredient or cuisine search. |
 
 ## Tech Stack
 
-- **Backend:** FastAPI, Python
-- **ML/NLP:** sentence-transformers (MiniLM), RapidFuzz
+- **Backend:** Python, FastAPI
+- **Matching:** RapidFuzz, word-based ingredient matching
+- **LLM:** Google Gemini (intent parsing for `/chat`)
+- **Data:** TheMealDB (no API key required)
 - **Frontend:** HTML, vanilla JavaScript
-- **External API:** Spoonacular
+- **Inactive:** Spoonacular functions and sentence-transformers scoring remain in `ingredients.py` but the current app doesn't call them
 
 ## Running Locally
 
-1. Clone the repo and install dependencies:
+1. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+2. Create `api.env` in the project root (only needed for `/chat`):
+   ```
+   GEMINI_API_KEY=your_key_here
+   ```
+   Optionally set `GEMINI_MODEL` to override the default model name.
+3. Start the backend from the project root:
+   ```
+   python -m uvicorn backend.app.main:app --reload
+   ```
+4. Open `frontend/index.html` in your browser.
 
-pip install fastapi uvicorn requests python-dotenv sentence-transformers rapidfuzz
+## Limitations
 
-
-2. Get a free Spoonacular API key at [spoonacular.com/food-api](https://spoonacular.com/food-api)
-
-3. Create `api.env` in the project root:
-
-SPOONACULAR_API_KEY=your_key_here
-
-4. Start the backend:
-
-python -m uvicorn backend.app.main:app --reload
-
-
-5. Open `frontend/index.html` in your browser
+- TheMealDB is small and Western-leaning. It has some Indian recipes (Dal fry, Baingan Bharta, Lamb Biryani and others), but far fewer than a dedicated Indian recipe source would. This is the main limit on result quality.
+- TheMealDB provides no cooking time or servings.
+- Ingredient matching is word-based, so unusual phrasings can miss.
+- The web page uses `/recipes`. `/chat` is available through the API but isn't wired into the UI yet.
+- Ranking quality hasn't been formally evaluated.
+- Each search makes roughly 15 external API calls and has no caching, so responses take a few seconds.
 
 ## Future Enhancements
 
-- Nutrition analysis matched to health/dietary goals
-- Photo-based ingredient recognition (computer vision)
-- Budget-aware recommendations
+- Evaluate ranking on a fixed set of test queries
+- Re-add embeddings as a tie-breaker and measure whether they help
+- Add a dedicated Indian recipe source to improve coverage
+- Cache API calls
+- Nutrition analysis against dietary goals
+- Photo-based ingredient recognition
 - Multi-user pantry sync
