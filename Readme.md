@@ -6,7 +6,7 @@ Find recipes you can cook right now, using ingredients you already have.
 
 Most recipe apps start from a dish and send you shopping. Pantry Matcher starts from your kitchen: you list what you have, and it ranks recipes by how much of each one you already own, suggests substitutes for what's missing, and shows full instructions on demand.
 
-![Screenshot](docs/screenshot.png)
+<img width="1609" height="860" alt="AdobeExpressPhotos_3bd73460e568416e9d6d3c942f0e8e8e_CopyEdited" src="https://github.com/user-attachments/assets/b4d33600-4eae-4e37-a83a-a0c3e0aa59e9" />
 
 ## Features
 
